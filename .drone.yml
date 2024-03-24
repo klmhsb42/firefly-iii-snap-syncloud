@@ -1,0 +1,427 @@
+[
+   {
+      "kind": "pipeline",
+      "name": "amd64",
+      "platform": {
+         "arch": "amd64",
+         "os": "linux"
+      },
+      "services": [
+         {
+            "image": "docker:20.10.21-dind",
+            "name": "docker",
+            "privileged": true,
+            "volumes": [
+               {
+                  "name": "dockersock",
+                  "path": "/var/run"
+               }
+            ]
+         },
+         {
+            "image": "syncloud/platform-buster-amd64:22.02",
+            "name": "firefly-iii.buster.com",
+            "privileged": true,
+            "volumes": [
+               {
+                  "name": "dbus",
+                  "path": "/var/run/dbus"
+               },
+               {
+                  "name": "dev",
+                  "path": "/dev"
+               }
+            ]
+         }
+      ],
+      "steps": [
+         {
+            "commands": [
+               "echo $DRONE_BUILD_NUMBER > version"
+            ],
+            "image": "debian:buster-slim",
+            "name": "version"
+         },
+         {
+            "commands": [
+               "./download.sh latest"
+            ],
+            "image": "debian:buster-slim",
+            "name": "download"
+         },
+         {
+            "commands": [
+               "./nginx/build.sh 1.24.0"
+            ],
+            "image": "docker:20.10.21-dind",
+            "name": "nginx",
+            "volumes": [
+               {
+                  "name": "dockersock",
+                  "path": "/var/run"
+               }
+            ]
+         },
+         {
+            "commands": [
+               "./redis/build.sh"
+            ],
+            "image": "redis:7.0.15",
+            "name": "redis"
+         },
+         {
+            "commands": [
+               "./postgresql/build.sh"
+            ],
+            "image": "docker:20.10.21-dind",
+            "name": "postgresql",
+            "volumes": [
+               {
+                  "name": "dockersock",
+                  "path": "/var/run"
+               }
+            ]
+         },
+         {
+            "commands": [
+               "./mariadb/build.sh"
+            ],
+            "image": "mariadb:lts",
+            "name": "mariadb",
+            "volumes": [
+               {
+                  "name": "dockersock",
+                  "path": "/var/run"
+               }
+            ]
+         },
+         {
+            "commands": [
+               "./build.sh"
+            ],
+            "image": "debian:buster-slim",
+            "name": "build"
+         },
+         {
+            "commands": [
+               "VERSION=$(cat version)",
+               "./package.sh firefly-iii $VERSION "
+            ],
+            "image": "debian:buster-slim",
+            "name": "package"
+         },
+         {
+            "commands": [
+               "APP_ARCHIVE_PATH=$(realpath $(cat package.name))",
+               "cd integration",
+               "./deps.sh",
+               "py.test -x -s verify.py --distro=buster --domain=buster.com --app-archive-path=$APP_ARCHIVE_PATH --device-host=firefly-iii.buster.com --app=firefly-iii --arch=amd64"
+            ],
+            "image": "python:3.8-slim-buster",
+            "name": "test"
+         },
+         {
+            "commands": [
+               "cd integration",
+               "./deps.sh",
+               "py.test -x -s test-ui.py --distro=buster --ui-mode=desktop --domain=buster.com --device-host=firefly-iii.buster.com --app=firefly-iii --browser=firefox"
+            ],
+            "image": "python:3.8-slim-buster",
+            "name": "test-ui"
+         },
+         {
+            "commands": [
+               "PACKAGE=$(cat package.name)",
+               "apt update && apt install -y wget",
+               "wget https://github.com/syncloud/store/releases/download/4/syncloud-release-amd64 -O release --progress=dot:giga",
+               "chmod +x release",
+               "./release publish -f $PACKAGE -b $DRONE_BRANCH"
+            ],
+            "environment": {
+               "AWS_ACCESS_KEY_ID": {
+                  "from_secret": "AWS_ACCESS_KEY_ID"
+               },
+               "AWS_SECRET_ACCESS_KEY": {
+                  "from_secret": "AWS_SECRET_ACCESS_KEY"
+               },
+               "SYNCLOUD_TOKEN": {
+                  "from_secret": "SYNCLOUD_TOKEN"
+               }
+            },
+            "image": "debian:buster-slim",
+            "name": "upload",
+            "when": {
+               "branch": [
+                  "stable",
+                  "master"
+               ],
+               "event": [
+                  "push"
+               ]
+            }
+         },
+         {
+            "commands": [
+               "apt update && apt install -y wget",
+               "wget https://github.com/syncloud/store/releases/download/4/syncloud-release-amd64 -O release --progress=dot:giga",
+               "chmod +x release",
+               "./release promote -n firefly-iii -a $(dpkg --print-architecture)"
+            ],
+            "environment": {
+               "AWS_ACCESS_KEY_ID": {
+                  "from_secret": "AWS_ACCESS_KEY_ID"
+               },
+               "AWS_SECRET_ACCESS_KEY": {
+                  "from_secret": "AWS_SECRET_ACCESS_KEY"
+               },
+               "SYNCLOUD_TOKEN": {
+                  "from_secret": "SYNCLOUD_TOKEN"
+               }
+            },
+            "image": "debian:buster-slim",
+            "name": "promote",
+            "when": {
+               "branch": [
+                  "stable"
+               ],
+               "event": [
+                  "push"
+               ]
+            }
+         }
+      ],
+      "trigger": {
+         "event": [
+            "push",
+            "pull_request"
+         ]
+      },
+      "type": "docker",
+      "volumes": [
+         {
+            "host": {
+               "path": "/var/run/dbus"
+            },
+            "name": "dbus"
+         },
+         {
+            "host": {
+               "path": "/dev"
+            },
+            "name": "dev"
+         },
+         {
+            "name": "dockersock",
+            "temp": { }
+         }
+      ]
+   },
+   {
+      "kind": "pipeline",
+      "name": "arm64",
+      "platform": {
+         "arch": "arm64",
+         "os": "linux"
+      },
+      "services": [
+         {
+            "image": "docker:19.03.8-dind",
+            "name": "docker",
+            "privileged": true,
+            "volumes": [
+               {
+                  "name": "dockersock",
+                  "path": "/var/run"
+               }
+            ]
+         },
+         {
+            "image": "syncloud/platform-buster-arm64:22.02",
+            "name": "firefly-iii.buster.com",
+            "privileged": true,
+            "volumes": [
+               {
+                  "name": "dbus",
+                  "path": "/var/run/dbus"
+               },
+               {
+                  "name": "dev",
+                  "path": "/dev"
+               }
+            ]
+         }
+      ],
+      "steps": [
+         {
+            "commands": [
+               "echo $DRONE_BUILD_NUMBER > version"
+            ],
+            "image": "debian:buster-slim",
+            "name": "version"
+         },
+         {
+            "commands": [
+               "./download.sh latest"
+            ],
+            "image": "debian:buster-slim",
+            "name": "download"
+         },
+         {
+            "commands": [
+               "./nginx/build.sh 1.24.0"
+            ],
+            "image": "docker:19.03.8-dind",
+            "name": "nginx",
+            "volumes": [
+               {
+                  "name": "dockersock",
+                  "path": "/var/run"
+               }
+            ]
+         },
+         {
+            "commands": [
+               "./redis/build.sh"
+            ],
+            "image": "redis:7.0.15",
+            "name": "redis"
+         },
+         {
+            "commands": [
+               "./postgresql/build.sh"
+            ],
+            "image": "docker:19.03.8-dind",
+            "name": "postgresql",
+            "volumes": [
+               {
+                  "name": "dockersock",
+                  "path": "/var/run"
+               }
+            ]
+         },
+         {
+            "commands": [
+               "./mariadb/build.sh"
+            ],
+            "image": "mariadb:lts",
+            "name": "mariadb",
+            "volumes": [
+               {
+                  "name": "dockersock",
+                  "path": "/var/run"
+               }
+            ]
+         },
+         {
+            "commands": [
+               "./build.sh"
+            ],
+            "image": "debian:buster-slim",
+            "name": "build"
+         },
+         {
+            "commands": [
+               "VERSION=$(cat version)",
+               "./package.sh firefly-iii $VERSION "
+            ],
+            "image": "debian:buster-slim",
+            "name": "package"
+         },
+         {
+            "commands": [
+               "APP_ARCHIVE_PATH=$(realpath $(cat package.name))",
+               "cd integration",
+               "./deps.sh",
+               "py.test -x -s verify.py --distro=buster --domain=buster.com --app-archive-path=$APP_ARCHIVE_PATH --device-host=firefly-iii.buster.com --app=firefly-iii --arch=arm64"
+            ],
+            "image": "python:3.8-slim-buster",
+            "name": "test"
+         },
+         {
+            "commands": [
+               "PACKAGE=$(cat package.name)",
+               "apt update && apt install -y wget",
+               "wget https://github.com/syncloud/store/releases/download/4/syncloud-release-arm64 -O release --progress=dot:giga",
+               "chmod +x release",
+               "./release publish -f $PACKAGE -b $DRONE_BRANCH"
+            ],
+            "environment": {
+               "AWS_ACCESS_KEY_ID": {
+                  "from_secret": "AWS_ACCESS_KEY_ID"
+               },
+               "AWS_SECRET_ACCESS_KEY": {
+                  "from_secret": "AWS_SECRET_ACCESS_KEY"
+               },
+               "SYNCLOUD_TOKEN": {
+                  "from_secret": "SYNCLOUD_TOKEN"
+               }
+            },
+            "image": "debian:buster-slim",
+            "name": "upload",
+            "when": {
+               "branch": [
+                  "stable",
+                  "master"
+               ],
+               "event": [
+                  "push"
+               ]
+            }
+         },
+         {
+            "commands": [
+               "apt update && apt install -y wget",
+               "wget https://github.com/syncloud/store/releases/download/4/syncloud-release-arm64 -O release --progress=dot:giga",
+               "chmod +x release",
+               "./release promote -n firefly-iii -a $(dpkg --print-architecture)"
+            ],
+            "environment": {
+               "AWS_ACCESS_KEY_ID": {
+                  "from_secret": "AWS_ACCESS_KEY_ID"
+               },
+               "AWS_SECRET_ACCESS_KEY": {
+                  "from_secret": "AWS_SECRET_ACCESS_KEY"
+               },
+               "SYNCLOUD_TOKEN": {
+                  "from_secret": "SYNCLOUD_TOKEN"
+               }
+            },
+            "image": "debian:buster-slim",
+            "name": "promote",
+            "when": {
+               "branch": [
+                  "stable"
+               ],
+               "event": [
+                  "push"
+               ]
+            }
+         }
+      ],
+      "trigger": {
+         "event": [
+            "push",
+            "pull_request"
+         ]
+      },
+      "type": "docker",
+      "volumes": [
+         {
+            "host": {
+               "path": "/var/run/dbus"
+            },
+            "name": "dbus"
+         },
+         {
+            "host": {
+               "path": "/dev"
+            },
+            "name": "dev"
+         },
+         {
+            "name": "dockersock",
+            "temp": { }
+         }
+      ]
+   }
+]

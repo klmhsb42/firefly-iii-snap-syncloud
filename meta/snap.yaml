@@ -1,0 +1,74 @@
+apps:
+  postgresql:
+    user: nextcloud
+    command: bin/service.postgresql.sh start
+    daemon: forking
+    plugs:
+    - network
+    - network-bind
+    restart-condition: always
+    before: [php-fpm]
+
+  redis:
+    user: nextcloud
+    daemon: simple
+    command: bin/service.redis.sh
+    restart-condition: always
+    before: [php-fpm]
+
+  php-fpm:
+    user: nextcloud
+    command: bin/service.php-fpm.sh start
+    daemon: forking
+    plugs:
+    - network
+    - network-bind
+    restart-condition: always
+    post-start-command: bin/service.php-fpm.sh post-start
+    after: [postgresql]
+    before: [nginx]
+  
+  nginx:
+    command: bin/service.nginx.sh
+    user: nextcloud
+    daemon: simple
+    plugs:
+    - network
+    - network-bind
+    restart-condition: always
+    
+  occ:
+    command: bin/occ-runner
+
+  psql:
+    command: bin/psql.sh
+
+  pgdumpall:
+    command: bin/pg_dumpall.sh
+
+  cron:
+    command: bin/nextcloud-cron
+  
+  php:
+    command: bin/php-runner
+
+  storage-change:
+    command: hooks/storage-change
+
+  access-change:
+    command: hooks/access-change
+
+  backup-pre-stop:
+    command: hooks/backup-pre-stop
+
+  restore-pre-start:
+    command: hooks/restore-pre-start
+
+  restore-post-start:
+    command: hooks/restore-post-start
+
+confinement: strict
+description: Nextcloud
+grade: stable
+name: nextcloud
+summary: Nextcloud

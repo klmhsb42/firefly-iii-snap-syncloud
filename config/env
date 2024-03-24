@@ -1,0 +1,2 @@
+export MYSQL_PORT={{ db_mysql_port }}
+export MYSQL_DATABASE={{ database_dir }}
